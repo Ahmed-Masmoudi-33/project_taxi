@@ -1,0 +1,25 @@
+﻿@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+
+@if (IsAuthPage())
+{
+    @Body
+}
+else
+{
+    <div class="page">
+        <main>
+            <article class="content">
+                @Body
+            </article>
+        </main>
+    </div>
+}
+
+@code {
+    private bool IsAuthPage()
+    {
+        var uri = NavigationManager.Uri;
+        return uri.Contains("/login") || uri.Contains("/register");
+    }
+}

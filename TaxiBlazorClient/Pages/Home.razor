@@ -1,0 +1,25 @@
+﻿@page "/"
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Home - Taxi Management</PageTitle>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (isAuthenticated)
+        {
+            var user = await AuthService.GetCurrentUserAsync();
+            if (user != null)
+            {
+                // Both boss and employee go to taxis page
+                Navigation.NavigateTo("/taxis");
+            }
+        }
+        else
+        {
+            Navigation.NavigateTo("/login");
+        }
+    }
+}

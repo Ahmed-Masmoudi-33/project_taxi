@@ -1,0 +1,120 @@
+@page "/register"
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Register - Taxi Management</PageTitle>
+
+<div class="register-container">
+    <div class="register-card">
+        <div class="register-header">
+            <h1>Create Account</h1>
+            <p>Join our taxi management system</p>
+        </div>
+
+        <EditForm Model="@registerRequest" OnValidSubmit="@HandleRegister">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" />
+
+            <div class="form-group">
+                <label for="firstName">First Name</label>
+                <InputText id="firstName" @bind-Value="registerRequest.FirstName" class="form-control" />
+                <ValidationMessage For="@(() => registerRequest.FirstName)" />
+            </div>
+
+            <div class="form-group">
+                <label for="lastName">Last Name</label>
+                <InputText id="lastName" @bind-Value="registerRequest.LastName" class="form-control" />
+                <ValidationMessage For="@(() => registerRequest.LastName)" />
+            </div>
+
+            <div class="form-group">
+                <label for="cin">CIN</label>
+                <InputText id="cin" @bind-Value="registerRequest.CIN" class="form-control" />
+                <ValidationMessage For="@(() => registerRequest.CIN)" />
+            </div>
+
+            <div class="form-group">
+                <label for="phoneNumber">Phone Number</label>
+                <InputText id="phoneNumber" @bind-Value="registerRequest.PhoneNumber" class="form-control" />
+                <ValidationMessage For="@(() => registerRequest.PhoneNumber)" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <InputText id="password" type="password" @bind-Value="registerRequest.Password" class="form-control" />
+                <ValidationMessage For="@(() => registerRequest.Password)" />
+            </div>
+
+            <div class="form-group">
+                <label for="role">Role</label>
+                <InputSelect id="role" @bind-Value="registerRequest.Role" class="form-control">
+                    <option value="EMPLOYEE">Employee</option>
+                    <option value="BOSS">Boss</option>
+                </InputSelect>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger">@errorMessage</div>
+            }
+
+            @if (!string.IsNullOrEmpty(successMessage))
+            {
+                <div class="alert alert-success">@successMessage</div>
+            }
+
+            <button type="submit" class="btn btn-primary btn-block" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span>Registering...</span>
+                }
+                else
+                {
+                    <span>Register</span>
+                }
+            </button>
+
+            <div class="register-footer">
+                <p>Already have an account? <a href="/login">Login here</a></p>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private RegisterRequest registerRequest = new();
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private bool isLoading = false;
+
+    private async Task HandleRegister()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            var result = await AuthService.RegisterAsync(registerRequest);
+            if (result)
+            {
+                successMessage = "Registration successful! Redirecting to login...";
+                await Task.Delay(2000);
+                Navigation.NavigateTo("/login");
+            }
+            else
+            {
+                errorMessage = "Registration failed. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
+

@@ -1,0 +1,184 @@
+@page "/reports"
+@inject ReportService ReportService
+@inject TaxiService TaxiService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Reports - Taxi Management</PageTitle>
+
+<div class="reports-container">
+    <div class="page-header">
+        <h1>Monthly Reports</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" @onclick="NavigateToTaxis">Back to Taxis</button>
+            <button class="btn btn-secondary" @onclick="NavigateToExpenses">Expenses</button>
+            <button class="btn btn-outline-danger" @onclick="HandleLogout">Logout</button>
+        </div>
+    </div>
+
+    <div class="report-filters">
+        <div class="form-group">
+            <label>Select Taxi:</label>
+            <select @bind="selectedTaxiId" class="form-control">
+                <option value="0">Select a taxi</option>
+                @if (taxis != null)
+                {
+                    @foreach (var taxi in taxis)
+                    {
+                        <option value="@taxi.Id">@taxi.PlateNumber - @taxi.Governorate</option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Year:</label>
+            <InputNumber @bind-Value="selectedYear" class="form-control" min="2000" max="2100" />
+        </div>
+        <div class="form-group">
+            <label>Month:</label>
+            <InputNumber @bind-Value="selectedMonth" class="form-control" min="1" max="12" />
+        </div>
+        <button class="btn btn-primary" @onclick="GenerateReport" disabled="@isLoading">Generate Report</button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading">Generating report...</div>
+    }
+
+    @if (report != null)
+    {
+        <div class="report-card">
+            <h2>Monthly Report</h2>
+            <div class="report-stats">
+                @if (isBoss){
+                <div class="stat-item">
+                    <label>Total Revenue:</label>
+                    <span class="stat-value revenue">@report.TotalRevenue.ToString("F2") TND</span>
+                </div>}
+                @if (isBoss)
+                {
+                    <div class="stat-item">
+                        <label>Boss Revenue:</label>
+                    <span class="stat-value revenue">@report.BossRevenue.ToString("F2") TND</span>
+                </div>}
+                @if (isBoss)
+                {
+                    <div class="stat-item">
+                        <label>Total Expenses:</label>
+                    <span class="stat-value expense">@report.TotalExpenses.ToString("F2") TND</span>
+                </div>}
+                
+                <div class="stat-item">
+                    <label>Employee Commission:</label>
+                    <span class="stat-value commission">@report.EmployeeCommission.ToString("F2") TND</span>
+                </div>
+                @if (isBoss)
+                {
+                    <div class="stat-item">
+                        <label>Net Profit:</label>
+                    <span class="stat-value profit">@report.NetProfit.ToString("F2") TND</span>
+                </div>}
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+</div>
+
+@code {
+    private List<Taxi>? taxis;
+    private MonthlyTaxiReport? report;
+    private int selectedTaxiId = 0;
+    private int selectedYear = DateTime.Now.Year;
+    private int selectedMonth = DateTime.Now.Month;
+    private bool isLoading = false;
+    private string errorMessage = string.Empty;
+	private bool isBoss = false;
+	private User user = new User();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (!isAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        isBoss = user.Role == "BOSS";
+
+        await LoadTaxis();
+    }
+
+    private async Task LoadTaxis()
+    {
+        try
+        {
+            var user = await AuthService.GetCurrentUserAsync();
+            if (user?.Role == "BOSS")
+            {
+                taxis = await TaxiService.GetMyTaxisAsync();
+            }
+            else
+            {
+                // For employees, load their assigned taxis
+                taxis = await TaxiService.GetMyAssignedTaxisAsync();
+            }
+        }
+        catch
+        {
+            taxis = new List<Taxi>();
+        }
+        StateHasChanged();
+    }
+
+    private async Task GenerateReport()
+    {
+        if (selectedTaxiId == 0)
+        {
+            errorMessage = "Please select a taxi.";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = string.Empty;
+        report = null;
+
+        try
+        {
+            report = await ReportService.GetReportAsync(selectedTaxiId, selectedYear, selectedMonth);
+            if (report == null)
+            {
+                errorMessage = "Failed to generate report.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void NavigateToTaxis()
+    {
+        Navigation.NavigateTo("/taxis");
+    }
+
+    private void NavigateToExpenses()
+    {
+        Navigation.NavigateTo("/expenses");
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}
+

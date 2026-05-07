@@ -1,0 +1,322 @@
+@page "/taxis"
+@inject TaxiService TaxiService
+@inject CommissionService CommissionService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Taxi Management</PageTitle>
+
+<div class="taxi-management-container">
+    <div class="page-header">
+        <h1>Taxi Management</h1>
+        <div class="header-actions">
+            @if (isBoss)
+            {
+                <button class="btn btn-primary" @onclick="ShowAddModal">Add New Taxi</button>
+            }
+            <button class="btn btn-secondary" @onclick="NavigateToRides">Rides</button>
+            <button class="btn btn-secondary" @onclick="NavigateToReports">Reports</button>
+            <button class="btn btn-secondary" @onclick="NavigateToExpenses">Expenses</button>
+            <button class="btn btn-outline-danger" @onclick="HandleLogout">Logout</button>
+        </div>
+    </div>
+
+    @if (isBoss)
+    {
+        <div class="commission-section">
+            <h3>Commission Settings</h3>
+            <div class="commission-control">
+                <label>Commission Percentage: @commissionPercentage%</label>
+                <div class="commission-input-group">
+                    <input type="number" min="0" max="100" step="0.1" @bind="commissionPercentage" class="form-control" style="width: 150px;" />
+                    <button class="btn btn-success" @onclick="SaveCommission" disabled="@isSavingCommission">Save</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="taxis-grid">
+        @if (taxis == null)
+        {
+            <div class="loading">Loading taxis...</div>
+        }
+        else if (taxis.Count == 0)
+        {
+            <div class="empty-state">No taxis found. Add your first taxi!</div>
+        }
+        else
+        {
+            @foreach (var taxi in taxis)
+            {
+                <div class="taxi-card">
+                    <div class="taxi-card-header">
+                        <h3>@taxi.PlateNumber</h3>
+                        @if (isBoss)
+                        {
+                            <div class="taxi-actions">
+                                <button class="btn btn-sm btn-primary" @onclick="() => ShowEditModal(taxi)">Edit</button>
+                            </div>
+                        }
+                    </div>
+                    <div class="taxi-card-body">
+                        <p><strong>Governorate:</strong> @taxi.Governorate</p>
+                        @if(isBoss)
+                        {
+                            <p><strong>Employee:</strong> @(taxi.AssignedEmployeeName ?? "Not assigned")</p>
+						}
+		
+                        
+
+                        <button class="btn btn-sm btn-info" @onclick="() => ViewRides(taxi.Id)">View Rides</button>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@(isEditing ? "Edit Taxi" : "Add New Taxi")</h2>
+                <button class="btn-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="@taxiForm" OnValidSubmit="@SaveTaxi">
+                    <DataAnnotationsValidator />
+                    <div class="form-group">
+                        <label>Plate Number</label>
+                        <InputText @bind-Value="taxiForm.PlateNumber" class="form-control" disabled="@isEditing" />
+                    </div>
+                    <div class="form-group">
+                        <label>Governorate</label>
+                        <InputText @bind-Value="taxiForm.Governorate" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>Employee CIN </label>
+                        <InputText @bind-Value="taxiForm.EmployeeCIN" class="form-control" placeholder="Enter employee CIN to assign this taxi" />
+    
+                    </div>
+                    @if (!string.IsNullOrEmpty(modalErrorMessage))
+                    {
+                        <div class="alert alert-danger">@modalErrorMessage</div>
+                    }
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">Save</button>
+                        <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Taxi>? taxis;
+    private bool showModal = false;
+    private bool isEditing = false;
+    private Taxi? editingTaxi;
+    private TaxiCreateRequest taxiForm = new();
+    private string modalErrorMessage = string.Empty;
+    private bool isSaving = false;
+    private decimal commissionPercentage = 0;
+    private bool isSavingCommission = false;
+    private bool isBoss = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if user is authenticated
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (!isAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        var user = await AuthService.GetCurrentUserAsync();
+        if (user == null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        isBoss = user.Role == "BOSS";
+
+        await LoadTaxis();
+        if (isBoss)
+        {
+            await LoadCommission();
+        }
+    }
+
+    private async Task LoadTaxis()
+    {
+        try
+        {
+            if (isBoss)
+            {
+                taxis = await TaxiService.GetMyTaxisAsync();
+            }
+            else
+            {
+                // For employees, load their assigned taxis
+                taxis = await TaxiService.GetMyAssignedTaxisAsync();
+            }
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            // User doesn't have access - redirect to appropriate page
+            var user = await AuthService.GetCurrentUserAsync();
+            if (user?.Role == "EMPLOYEE")
+            {
+                Navigation.NavigateTo("/rides");
+            }
+            else
+            {
+                Navigation.NavigateTo("/login");
+            }
+            return;
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadCommission()
+    {
+        var commission = await CommissionService.GetCommissionAsync();
+        if (commission.HasValue)
+        {
+            commissionPercentage = commission.Value;
+        }
+    }
+
+    private void ShowAddModal()
+    {
+        isEditing = false;
+        editingTaxi = null;
+        taxiForm = new TaxiCreateRequest();
+        modalErrorMessage = string.Empty;
+        showModal = true;
+    }
+
+    private void ShowEditModal(Taxi taxi)
+    {
+        isEditing = true;
+        editingTaxi = taxi;
+        taxiForm = new TaxiCreateRequest
+        {
+            PlateNumber = taxi.PlateNumber,
+            Governorate = taxi.Governorate,
+            EmployeeCIN = taxi.AssignedEmployeeCIN
+        };
+        modalErrorMessage = string.Empty;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        isEditing = false;
+        editingTaxi = null;
+        taxiForm = new TaxiCreateRequest();
+        modalErrorMessage = string.Empty;
+    }
+
+    private async Task SaveTaxi()
+    {
+        isSaving = true;
+        modalErrorMessage = string.Empty;
+
+        try
+        {
+            if (isEditing && editingTaxi != null)
+            {
+                var updateRequest = new TaxiUpdateRequest
+                {
+                    PlateNumber = taxiForm.PlateNumber,
+                    Governorate = taxiForm.Governorate,
+                    EmployeeCIN = taxiForm.EmployeeCIN
+                };
+                var result = await TaxiService.UpdateTaxiAsync(editingTaxi.Id, updateRequest);
+                if (result == null)
+                {
+                    modalErrorMessage = "Failed to update taxi.";
+                    isSaving = false;
+                    return;
+                }
+            }
+            else
+            {
+                var result = await TaxiService.CreateTaxiAsync(taxiForm);
+                if (result == null)
+                {
+                    modalErrorMessage = "Failed to create taxi.";
+                    isSaving = false;
+                    return;
+                }
+            }
+
+            await LoadTaxis();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task SaveCommission()
+    {
+        isSavingCommission = true;
+        try
+        {
+            var request = new CommissionRequest { Percentage = commissionPercentage };
+            var result = await CommissionService.SetCommissionAsync(request);
+            if (result)
+            {
+                // Show success message
+            }
+        }
+        catch
+        {
+            // Handle error
+        }
+        finally
+        {
+            isSavingCommission = false;
+        }
+    }
+
+    private void ViewRides(int taxiId)
+    {
+        Navigation.NavigateTo($"/rides?taxiId={taxiId}");
+    }
+
+    private void NavigateToRides()
+    {
+        Navigation.NavigateTo("/rides");
+    }
+
+    private void NavigateToReports()
+    {
+        Navigation.NavigateTo("/reports");
+    }
+
+    private void NavigateToExpenses()
+    {
+        Navigation.NavigateTo("/expenses");
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}
+

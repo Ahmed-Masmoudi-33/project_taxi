@@ -29,6 +29,12 @@ namespace taxi.Repositories
                 .FirstOrDefaultAsync(u => u.PhoneNumber == phoneNumber);
         }
 
+        public async Task<User?> GetByCINAsync(string cin)
+        {
+            return await _context.Users
+                .FirstOrDefaultAsync(u => u.CIN == cin);
+        }
+
         public async Task<List<User>> GetAllEmployeesAsync()
         {
             return await _context.Users

@@ -6,6 +6,7 @@ namespace taxi.Interfaces.Repositories
     {
         Task<User?> GetByIdAsync(int id);
         Task<User?> GetByPhoneAsync(string phoneNumber);
+        Task<User?> GetByCINAsync(string cin);
 
         Task<List<User>> GetAllEmployeesAsync();
         Task<List<User>> GetAllBossesAsync();

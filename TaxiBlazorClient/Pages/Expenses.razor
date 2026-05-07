@@ -1,0 +1,275 @@
+@page "/expenses"
+@inject ExpenseService ExpenseService
+@inject TaxiService TaxiService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Expenses - Taxi Management</PageTitle>
+
+<div class="expenses-container">
+    <div class="page-header">
+        <h1>Expenses Management</h1>
+        <div class="header-actions">
+            <button class="btn btn-primary" @onclick="ShowAddModal">Add New Expense</button>
+            <button class="btn btn-secondary" @onclick="NavigateToTaxis">Back to Taxis</button>
+            <button class="btn btn-secondary" @onclick="NavigateToReports">Reports</button>
+            <button class="btn btn-outline-danger" @onclick="HandleLogout">Logout</button>
+        </div>
+    </div>
+
+    <div class="expenses-list">
+        @if (expenses == null)
+        {
+            <div class="loading">Loading expenses...</div>
+        }
+        else if (expenses.Count == 0)
+        {
+            <div class="empty-state">No expenses found. Add your first expense!</div>
+        }
+        else
+        {
+            var groupedExpenses = expenses
+                .GroupBy(e => e.PlateNumber)
+                .OrderBy(g => g.Key)
+                .ToList();
+            
+            @foreach (var group in groupedExpenses)
+            {
+                <div class="taxi-expense-section">
+                    <h3>Taxi: @group.Key</h3>
+                    <table class="table expenses-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Amount (TND)</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var expense in group.OrderByDescending(e => e.ExpenseDate))
+                            {
+                                <tr>
+                                    <td>@expense.ExpenseDate.ToString("yyyy-MM-dd")</td>
+                                    <td>@expense.Type</td>
+                                    <td>@expense.Amount.ToString("F2")</td>
+                                    <td>@(expense.Description ?? "-")</td>
+                                </tr>
+                            }
+                            <tr class="total-row">
+                                <td colspan="2"><strong>Subtotal for @group.Key:</strong></td>
+                                <td><strong>@group.Sum(e => e.Amount).ToString("F2") TND</strong></td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            }
+            
+            <div class="grand-total">
+                <h3>Grand Total: @expenses.Sum(e => e.Amount).ToString("F2") TND</h3>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Add Expense Modal -->
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Add New Expense</h2>
+                <button class="btn-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="@expenseForm" OnValidSubmit="@SaveExpense">
+                    <DataAnnotationsValidator />
+                    <div class="form-group">
+                        <label>Taxi (Plate Number)</label>
+                        <InputSelect @bind-Value="expenseForm.PlateNumber" class="form-control">
+                            <option value="">Select a taxi</option>
+                            @if (taxis != null)
+                            {
+                                @foreach (var taxi in taxis)
+                                {
+                                    <option value="@taxi.PlateNumber">@taxi.PlateNumber - @taxi.Governorate</option>
+                                }
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => expenseForm.PlateNumber)" />
+                    </div>
+                    <div class="form-group">
+                        <label>Type</label>
+                        <InputSelect @bind-Value="expenseForm.Type" class="form-control">
+                            <option value="FUEL">Fuel</option>
+                            <option value="REPAIR">Repair</option>
+                            <option value="INSURANCE">Insurance</option>
+                            <option value="VIGNETTE">Vignette</option>
+                            <option value="OTHER">Other</option>
+                        </InputSelect>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount (TND)</label>
+                        <InputNumber @bind-Value="expenseForm.Amount" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>Date</label>
+                        <InputDate @bind-Value="expenseDate" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>Description (Optional)</label>
+                        <InputTextArea @bind-Value="expenseForm.Description" class="form-control" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(modalErrorMessage))
+                    {
+                        <div class="alert alert-danger">@modalErrorMessage</div>
+                    }
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">Save</button>
+                        <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Expense> expenses = new();
+    private List<Taxi>? taxis;
+    private bool showModal = false;
+    private ExpenseCreateRequest expenseForm = new();
+    private string modalErrorMessage = string.Empty;
+    private bool isSaving = false;
+    private DateTime? expenseDate = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (!isAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadTaxis();
+        await LoadExpenses();
+    }
+
+    private async Task LoadTaxis()
+    {
+        try
+        {
+            var user = await AuthService.GetCurrentUserAsync();
+            if (user?.Role == "BOSS")
+            {
+                taxis = await TaxiService.GetMyTaxisAsync();
+            }
+            else
+            {
+                // For employees, load their assigned taxis
+                taxis = await TaxiService.GetMyAssignedTaxisAsync();
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // If user doesn't have access, show empty list
+            taxis = new List<Taxi>();
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error loading taxis: {ex.Message}";
+            taxis = new List<Taxi>();
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadExpenses()
+    {
+        expenses = await ExpenseService.GetMyExpensesAsync() ?? new List<Expense>();
+        StateHasChanged();
+    }
+
+    private void ShowAddModal()
+    {
+        expenseForm = new ExpenseCreateRequest
+        {
+            ExpenseDate = DateTime.Today,
+            Type = "OTHER"
+        };
+        expenseDate = DateTime.Today;
+        modalErrorMessage = string.Empty;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        expenseForm = new ExpenseCreateRequest();
+        modalErrorMessage = string.Empty;
+    }
+
+    private async Task SaveExpense()
+    {
+        isSaving = true;
+        modalErrorMessage = string.Empty;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(expenseForm.PlateNumber))
+            {
+                modalErrorMessage = "Please select a taxi.";
+                isSaving = false;
+                return;
+            }
+
+            if (expenseDate.HasValue)
+            {
+                expenseForm.ExpenseDate = expenseDate.Value;
+            }
+            else
+            {
+                modalErrorMessage = "Please select an expense date.";
+                isSaving = false;
+                return;
+            }
+
+            var result = await ExpenseService.AddExpenseAsync(expenseForm);
+            if (result != null)
+            {
+                await LoadExpenses();
+                CloseModal();
+            }
+            else
+            {
+                modalErrorMessage = "Failed to add expense. Please check that the taxi exists and you have permission.";
+            }
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void NavigateToTaxis()
+    {
+        Navigation.NavigateTo("/taxis");
+    }
+
+    private void NavigateToReports()
+    {
+        Navigation.NavigateTo("/reports");
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}
+

@@ -1,0 +1,403 @@
+@page "/rides"
+@inject RideService RideService
+@inject TaxiService TaxiService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Rides Management</PageTitle>
+
+<div class="rides-container">
+    <div class="page-header">
+        <h1>Rides Management</h1>
+        <div class="header-actions">
+            <button class="btn btn-primary" @onclick="ShowAddModal">Add New Ride</button>
+            @if (selectedTaxiId.HasValue)
+            {
+                <button class="btn btn-secondary" @onclick="ClearTaxiFilter">Show All Taxis</button>
+            }
+            <button class="btn btn-secondary" @onclick="NavigateToTaxis">Taxis</button>
+            <button class="btn btn-secondary" @onclick="NavigateToReports">Reports</button>
+            <button class="btn btn-secondary" @onclick="NavigateToExpenses">Expenses</button>
+            <button class="btn btn-outline-danger" @onclick="HandleLogout">Logout</button>
+        </div>
+    </div>
+
+    @if (isEmployee && assignedTaxis != null && assignedTaxis.Count > 0)
+    {
+        <div class="assigned-taxis-section">
+            <h2>My Assigned Taxis</h2>
+            <div class="taxis-grid">
+                @foreach (var taxi in assignedTaxis)
+                {
+                    <div class="taxi-card">
+                        <div class="taxi-card-header">
+                            <h3>@taxi.PlateNumber</h3>
+                        </div>
+                        <div class="taxi-card-body">
+                            <p><strong>Governorate:</strong> @taxi.Governorate</p>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (taxis != null && taxis.Count > 0)
+    {
+        <div class="taxi-selector">
+            <label>Select Taxi:</label>
+            <select @bind="selectedTaxiId" @bind:after="OnTaxiChanged" class="form-control">
+                <option value="">All Taxis</option>
+                @foreach (var taxi in taxis)
+                {
+                    <option value="@taxi.Id">@taxi.PlateNumber - @taxi.Governorate</option>
+                }
+            </select>
+        </div>
+    }
+
+    <div class="rides-list">
+        @if (rides == null)
+        {
+            <div class="loading">Loading rides...</div>
+        }
+        else if (rides.Count == 0)
+        {
+            <div class="empty-state">No rides found. Add your first ride!</div>
+        }
+        else
+        {
+            <table class="table rides-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Distance (Km)</th>
+                        <th>Amount (TND)</th>
+                        <th>Taxi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ride in rides)
+                    {
+                        <tr>
+                            <td>@ride.StartDate.ToString("yyyy-MM-dd")</td>
+                            <td>@ride.StartDate.ToString("HH:mm")</td>
+                            <td>@ride.EndDate.ToString("HH:mm")</td>
+                            <td>@ride.DistanceKm.ToString("F2")</td>
+                            <td>@ride.Amount.ToString("F2")</td>
+                            <td>@(ride.TaxiPlateNumber ?? taxis?.FirstOrDefault(t => t.Id == ride.TaxiId)?.PlateNumber ?? "N/A")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<!-- Add Ride Modal -->
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Add New Ride</h2>
+                <button class="btn-close" @onclick="CloseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="@rideForm" OnValidSubmit="@SaveRide">
+                    <DataAnnotationsValidator />
+                    <div class="form-group">
+                        <label>Taxi</label>
+                        <InputSelect @bind-Value="rideForm.TaxiId" class="form-control">
+                            <option value="0">Select a taxi</option>
+                            @if (taxis != null)
+                            {
+                                @foreach (var taxi in taxis)
+                                {
+                                    <option value="@taxi.Id">@taxi.PlateNumber - @taxi.Governorate</option>
+                                }
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Date</label>
+                        <InputDate @bind-Value="startDate" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="time" value="@startTime" @onchange="OnStartTimeChanged" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>End Date</label>
+                        <InputDate @bind-Value="endDate" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input type="time" value="@endTime" @onchange="OnEndTimeChanged" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>Distance (Km)</label>
+                        <InputNumber @bind-Value="rideForm.DistanceKm" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label>Amount (TND)</label>
+                        <InputNumber @bind-Value="rideForm.Amount" class="form-control" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(modalErrorMessage))
+                    {
+                        <div class="alert alert-danger">@modalErrorMessage</div>
+                    }
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">Save</button>
+                        <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Ride> rides = new();
+    private List<Taxi>? taxis;
+    private List<Taxi>? assignedTaxis;
+    private bool showModal = false;
+    private RideCreateRequest rideForm = new();
+    private string modalErrorMessage = string.Empty;
+    private bool isSaving = false;
+    private DateTime? startDate = DateTime.Today;
+    private string startTime = DateTime.Now.ToString("HH:mm");
+    private DateTime? endDate = DateTime.Today;
+    private string endTime = DateTime.Now.ToString("HH:mm");
+    private int? selectedTaxiId;
+    private bool isEmployee = false;
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public int? TaxiId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (!isAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        // Check if user is employee
+        var user = await AuthService.GetCurrentUserAsync();
+        isEmployee = user?.Role == "EMPLOYEE";
+
+        // Load taxis - bosses can see their taxis, employees see their assigned taxis
+        await LoadTaxis();
+        
+        if (TaxiId.HasValue)
+        {
+            selectedTaxiId = TaxiId;
+        }
+
+        await LoadRides();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reload rides when query parameter changes
+        if (TaxiId.HasValue && selectedTaxiId != TaxiId)
+        {
+            selectedTaxiId = TaxiId;
+            await LoadRides();
+        }
+        else if (!TaxiId.HasValue && selectedTaxiId.HasValue)
+        {
+            selectedTaxiId = null;
+            await LoadRides();
+        }
+    }
+
+    private async Task LoadTaxis()
+    {
+        try
+        {
+            if (isEmployee)
+            {
+                // For employees, load their assigned taxis
+                assignedTaxis = await TaxiService.GetMyAssignedTaxisAsync();
+                taxis = assignedTaxis; // Use assigned taxis for the dropdown as well
+            }
+            else
+            {
+                // For bosses, load their taxis
+                taxis = await TaxiService.GetMyTaxisAsync();
+            }
+        }
+        catch
+        {
+            taxis = new List<Taxi>();
+            assignedTaxis = new List<Taxi>();
+        }
+        StateHasChanged();
+    }
+
+    private void ShowAddModal()
+    {
+        rideForm = new RideCreateRequest();
+        startDate = DateTime.Today;
+        startTime = DateTime.Now.ToString("HH:mm");
+        endDate = DateTime.Today;
+        endTime = DateTime.Now.ToString("HH:mm");
+        modalErrorMessage = string.Empty;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        rideForm = new RideCreateRequest();
+        modalErrorMessage = string.Empty;
+    }
+
+    private async Task SaveRide()
+    {
+        isSaving = true;
+        modalErrorMessage = string.Empty;
+
+        try
+        {
+            if (startDate.HasValue && !string.IsNullOrEmpty(startTime))
+            {
+                if (TimeSpan.TryParse(startTime, out var startTimeSpan))
+                {
+                    rideForm.StartDate = startDate.Value.Date + startTimeSpan;
+                }
+                else
+                {
+                    modalErrorMessage = "Please enter a valid start time.";
+                    isSaving = false;
+                    return;
+                }
+            }
+            else
+            {
+                modalErrorMessage = "Please select start date and time.";
+                isSaving = false;
+                return;
+            }
+
+            if (endDate.HasValue && !string.IsNullOrEmpty(endTime))
+            {
+                if (TimeSpan.TryParse(endTime, out var endTimeSpan))
+                {
+                    rideForm.EndDate = endDate.Value.Date + endTimeSpan;
+                }
+                else
+                {
+                    modalErrorMessage = "Please enter a valid end time.";
+                    isSaving = false;
+                    return;
+                }
+            }
+            else
+            {
+                modalErrorMessage = "Please select end date and time.";
+                isSaving = false;
+                return;
+            }
+
+            if (rideForm.TaxiId == 0)
+            {
+                modalErrorMessage = "Please select a taxi.";
+                isSaving = false;
+                return;
+            }
+
+            var result = await RideService.AddRideAsync(rideForm);
+            if (result != null)
+            {
+                await LoadRides();
+                CloseModal();
+            }
+            else
+            {
+                modalErrorMessage = "Failed to add ride.";
+            }
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task LoadRides()
+    {
+        try
+        {
+            rides = await RideService.GetMyRidesAsync(selectedTaxiId) ?? new List<Ride>();
+        }
+        catch (Exception ex)
+        {
+            rides = new List<Ride>();
+            // Optionally show error message - you can add an error message display in the UI if needed
+            Console.WriteLine($"Error loading rides: {ex.Message}");
+        }
+        StateHasChanged();
+    }
+
+    private async Task OnTaxiChanged()
+    {
+        if (selectedTaxiId.HasValue)
+        {
+            Navigation.NavigateTo($"/rides?taxiId={selectedTaxiId}");
+        }
+        else
+        {
+            Navigation.NavigateTo("/rides");
+        }
+        await LoadRides();
+    }
+
+    private async Task ClearTaxiFilter()
+    {
+        selectedTaxiId = null;
+        Navigation.NavigateTo("/rides");
+        await LoadRides();
+    }
+
+    private void OnStartTimeChanged(ChangeEventArgs e)
+    {
+        startTime = e.Value?.ToString() ?? DateTime.Now.ToString("HH:mm");
+    }
+
+    private void OnEndTimeChanged(ChangeEventArgs e)
+    {
+        endTime = e.Value?.ToString() ?? DateTime.Now.ToString("HH:mm");
+    }
+
+    private void NavigateToTaxis()
+    {
+        Navigation.NavigateTo("/taxis");
+    }
+
+    private void NavigateToReports()
+    {
+        Navigation.NavigateTo("/reports");
+    }
+
+    private void NavigateToExpenses()
+    {
+        Navigation.NavigateTo("/expenses");
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}
+

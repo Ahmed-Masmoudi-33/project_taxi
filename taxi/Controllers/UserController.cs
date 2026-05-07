@@ -44,7 +44,7 @@ namespace taxi.Controllers
                 }
                 return BadRequest(new { message = errorMessage });
             }
-        }
+        } 
 
         // POST: taxi/users/login
       [HttpPost("login")]

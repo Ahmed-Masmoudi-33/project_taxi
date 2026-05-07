@@ -12,8 +12,8 @@ using taxi.Data;
 namespace taxi.Migrations
 {
     [DbContext(typeof(ApplicationContext))]
-    [Migration("20251217170157_a")]
-    partial class a
+    [Migration("20251221201233_n")]
+    partial class n
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -91,6 +91,10 @@ namespace taxi.Migrations
 
                     b.Property<DateTime>("ExpenseDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("PlateNumber")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("TaxiId")
                         .HasColumnType("int");
@@ -176,10 +180,6 @@ namespace taxi.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("CIN")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

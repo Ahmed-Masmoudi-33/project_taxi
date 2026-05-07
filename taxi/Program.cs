@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
 using taxi.Data;
 using taxi.Interfaces.Repositories;
@@ -19,7 +20,41 @@ public class Program
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+        // Add CORS
+        builder.Services.AddCors(options =>
+            options.AddPolicy("AllowAll", policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+
+        builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Taxi API", Version = "v1" });
+    
+    // Add JWT Bearer authentication to Swagger
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below. Example: \"Bearer 12345abcdef\"",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT"
+    });
+    
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 //ajout de la connexion a la base de donnee
 var cnx = builder.Configuration.GetConnectionString("cnx");
@@ -30,6 +65,13 @@ builder.Services.AddDbContext<ApplicationContext>(
 builder.Services.AddScoped<IUserAuthService, UserAuthService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<ITaxiRepository, TaxiRepository>();
+        builder.Services.AddScoped<IRideRepository, RideRepository>();   
+        builder.Services.AddScoped<IAssignmentRepository, AssignmentRepository>();
+        builder.Services.   AddScoped<IExpenseRepository, ExpenseRepository>();
+        builder.Services.   AddScoped<ICommissionRepository, CommissionRepository>();
+        builder.Services.AddScoped<ReportService>();
+
 
         builder.Services.AddAuthentication(options =>
         {
@@ -49,7 +91,9 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
                 ValidAudience = builder.Configuration["Jwt:Audience"],
                 IssuerSigningKey = new SymmetricSecurityKey(
                     Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
-                )
+                ),
+                // Map role claim correctly
+                RoleClaimType = System.Security.Claims.ClaimTypes.Role
             };
         });
 
@@ -69,6 +113,10 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 }
 
 app.UseHttpsRedirection();
+
+        // Enable CORS - must be before UseAuthentication and UseAuthorization
+app.UseCors("AllowAll");
+
 
 app.UseAuthentication();
 app.UseAuthorization();

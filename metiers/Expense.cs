@@ -15,9 +15,9 @@ namespace metiers
         public DateTime ExpenseDate { get; set; }
 
         public string? Description { get; set; }
-
         public int TaxiId { get; set; }
         [ForeignKey("TaxiId")]
+        public  string PlateNumber { get; set; }
         public virtual Taxi Taxi { get; set; } = null!;
     }
 
