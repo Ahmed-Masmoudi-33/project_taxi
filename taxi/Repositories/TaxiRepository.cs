@@ -44,6 +44,25 @@ namespace taxi.Repositories
         {
             _context.Taxis.Update(taxi);
             await _context.SaveChangesAsync();
-        }   
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var taxi = await _context.Taxis
+                .Include(t => t.Expenses)
+                .Include(t => t.Assignments)
+                .Include(t => t.Rides)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (taxi == null)
+                return false;
+
+            _context.Expenses.RemoveRange(taxi.Expenses);
+            _context.Assignments.RemoveRange(taxi.Assignments);
+            _context.Rides.RemoveRange(taxi.Rides);
+            _context.Taxis.Remove(taxi);
+            await _context.SaveChangesAsync();
+            return true;
+        }
     }
 }

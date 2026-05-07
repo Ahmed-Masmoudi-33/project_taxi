@@ -37,6 +37,7 @@ namespace taxi.Repositories
                             r.StartDate >= start &&
                             r.EndDate <= end)
                 .Include(r => r.Taxi)
+                .Include(r => r.Employee)
                 .OrderByDescending(r => r.StartDate)
                 .ToListAsync();
         }
@@ -46,6 +47,7 @@ namespace taxi.Repositories
             return await _context.Rides
                 .Where(r => r.EmployeeId == employeeId)
                 .Include(r => r.Taxi)
+                .Include(r => r.Employee)
                 .OrderByDescending(r => r.StartDate)
                 .ToListAsync();
         }
@@ -62,6 +64,7 @@ namespace taxi.Repositories
 
             return await query
                 .Include(r => r.Taxi)
+                .Include(r => r.Employee)
                 .OrderByDescending(r => r.StartDate)
                 .ToListAsync();
         }
@@ -98,6 +101,7 @@ namespace taxi.Repositories
 
             return await query
                 .Include(r => r.Taxi)
+                .Include(r => r.Employee)
                 .OrderByDescending(r => r.StartDate)
                 .ToListAsync();
         }

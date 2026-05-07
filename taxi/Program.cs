@@ -112,10 +112,18 @@ builder.Services.AddScoped<ITaxiRepository, TaxiRepository>();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+        // CORS avant UseHttpsRedirection : sinon le preflight OPTIONS reçoit une 307 vers HTTPS
+        // et le navigateur bloque (« Redirect is not allowed for a preflight request »).
+        app.UseCors("AllowAll");
 
-        // Enable CORS - must be before UseAuthentication and UseAuthorization
-app.UseCors("AllowAll");
+        // En dev, pas de redirection HTTP → HTTPS : le front en http://localhost:4200
+        // appelle l’API en http://localhost:5067 sans certificat ni 307 vers :7067.
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseHttpsRedirection();
+        }
+
+        // Auth après CORS (inchangé)
 
 
 app.UseAuthentication();

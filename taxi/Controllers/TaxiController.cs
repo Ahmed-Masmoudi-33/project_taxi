@@ -217,5 +217,25 @@ namespace taxi.Controllers
 
             return Ok(taxiDTOs);
         }
+
+        // DELETE: api/taxis/{id}
+        [HttpDelete("{id}")]
+        [Authorize(Roles = UserRoles.BOSS)]
+        public async Task<IActionResult> DeleteTaxi(int id)
+        {
+            var bossId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var taxi = await _taxiRepository.GetByIdAsync(id);
+            if (taxi == null)
+                return NotFound();
+
+            if (taxi.BossId != bossId)
+                return Forbid();
+
+            var deleted = await _taxiRepository.DeleteAsync(id);
+            if (!deleted)
+                return NotFound();
+
+            return NoContent();
+        }
     }
 }

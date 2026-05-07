@@ -9,5 +9,6 @@ namespace taxi.Interfaces.Repositories
 
         Task AddAsync(Taxi taxi);
         Task UpdateAsync(Taxi taxi);
+        Task<bool> DeleteAsync(int id);
     }
 }

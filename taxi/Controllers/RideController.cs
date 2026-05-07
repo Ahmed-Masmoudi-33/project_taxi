@@ -119,6 +119,9 @@ namespace taxi.Controllers
                     Id = r.Id,
                     TaxiId = r.TaxiId,
                     EmployeeId = r.EmployeeId,
+                    EmployeeName = r.Employee != null
+                        ? $"{r.Employee.FirstName} {r.Employee.LastName}".Trim()
+                        : null,
                     StartDate = r.StartDate,
                     EndDate = r.EndDate,
                     DistanceKm = r.DistanceKm,
